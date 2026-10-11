@@ -164,7 +164,7 @@ class TendiesPyGUI:
         work = tempfile.mkdtemp(prefix="tendiespy_")
         try:
             with zipfile.ZipFile(path) as z:
-                z.extractall(work)
+                conv.safe_extract(z, work)
 
             # 步骤1：格式转换（Clownfish + 景深）
             converted = conv.convert_tree(work)

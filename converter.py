@@ -999,6 +999,46 @@ def synthesize_foreground_plane(wallpaper_dir: str, doc_width: float,
     return written
 
 
+_SAFE_PLIST_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._~@-]*$")
+
+
+def _sanitize_plist_name(value: object) -> "str | None":
+    """Whitelist a plist-controlled string before it is used as a directory name.
+
+    ``Wallpaper.plist`` comes from the input package, so values like
+    ``../../..`` must never reach ``os.path.join`` — they would flow into
+    ``shutil.rmtree`` in ``rename_to_skeleton_shape``. Returns ``None`` when
+    the value is unusable; callers skip the rename instead of inventing a name.
+    """
+    text = str(value or "").strip()
+    if not text or not _SAFE_PLIST_NAME_RE.match(text):
+        return None
+    return text
+
+
+def _is_within_parent(parent: str, child: str) -> bool:
+    """Defense in depth: verify a derived path really sits under ``parent``."""
+    parent_real = os.path.realpath(parent)
+    child_real = os.path.realpath(child)
+    return os.path.commonpath((parent_real, child_real)) == parent_real
+
+
+def safe_extract(archive: "zipfile.ZipFile", dest: str) -> None:
+    """Extract ``archive`` into ``dest`` with a ZipSlip guard.
+
+    Raises :class:`ConversionError` when any member is absolute or escapes
+    ``dest`` via ``..`` — in that case nothing is extracted at all.
+    """
+    dest_abs = os.path.abspath(dest)
+    for member in archive.namelist():
+        if member.startswith(("/", "\\")) or os.path.isabs(member):
+            raise ConversionError(f"unsafe zip entry (absolute path): {member!r}")
+        target = os.path.abspath(os.path.join(dest_abs, os.path.normpath(member)))
+        if os.path.commonpath((dest_abs, target)) != dest_abs:
+            raise ConversionError(f"unsafe zip entry (path traversal): {member!r}")
+    archive.extractall(dest_abs)
+
+
 def _skeleton_names(data: dict,
                     family: str = CLOWNFISH_FAMILY
                     ) -> "tuple[str, dict[str, str]] | None":
@@ -1013,10 +1053,10 @@ def _skeleton_names(data: dict,
     asset_id = variant.get("identifier")
     if asset_id is None:
         asset_id = data.get("identifier")
-    logical_class = str(data.get("logicalScreenClass") or "").strip()
-    if asset_id is None or not logical_class:
+    logical_class = _sanitize_plist_name(data.get("logicalScreenClass"))
+    asset_id = _sanitize_plist_name(asset_id)
+    if asset_id is None or logical_class is None:
         return None
-    asset_id = str(asset_id)
     bundle = f"{asset_id}.{family}-{logical_class}.wallpaper"
     planes = {
         role: f"{asset_id}.{family}_{role}-{logical_class}.ca"
@@ -1050,6 +1090,9 @@ def rename_to_skeleton_shape(wallpaper_dir: str, data: dict,
         if not role:
             continue
         target = os.path.join(wallpaper_dir, plane_names[role])
+        if not _is_within_parent(wallpaper_dir, target):
+            raise ConversionError(
+                f"unsafe plane name derived from plist: {plane_names[role]!r}")
         if os.path.abspath(target) != os.path.abspath(plane_dir):
             if os.path.exists(target):
                 shutil.rmtree(target)
@@ -1057,6 +1100,9 @@ def rename_to_skeleton_shape(wallpaper_dir: str, data: dict,
 
     contents_dir = os.path.dirname(wallpaper_dir)
     new_dir = os.path.join(contents_dir, bundle_name)
+    if not _is_within_parent(contents_dir, new_dir):
+        raise ConversionError(
+            f"unsafe bundle name derived from plist: {bundle_name!r}")
     if os.path.abspath(new_dir) != os.path.abspath(wallpaper_dir):
         if os.path.exists(new_dir):
             shutil.rmtree(new_dir)
@@ -1259,7 +1305,7 @@ def main(argv: "list[str] | None" = None) -> int:
     try:
         if is_zip:
             with zipfile.ZipFile(args.input) as archive:
-                archive.extractall(work)
+                safe_extract(archive, work)
         else:
             source_dir = args.input
 
