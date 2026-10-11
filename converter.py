@@ -381,6 +381,83 @@ def _inject_contents(text: str, image: str) -> str:
     return text[:match.start()] + injected + text[match.end():]
 
 
+def _infer_asset_for_layer(name: str, assets: set) -> "str | None":
+    """Match a layer name to an asset file, stripping ' copy' suffixes."""
+    base = re.sub(r"(\s+copy)+$", "", name, flags=re.IGNORECASE).strip()
+    # Exact match (case-insensitive)
+    for asset in assets:
+        if asset.lower() == base.lower():
+            return asset
+    # Match by stem
+    base_stem = os.path.splitext(base)[0].lower()
+    for asset in assets:
+        if os.path.splitext(asset)[0].lower() == base_stem:
+            return asset
+    return None
+
+
+def ensure_layer_contents(plane_dir: str) -> int:
+    """Bind images to layers that have a name but no <contents>.
+
+    Some CAPlayground-authored planes ship layers with no <contents> binding;
+    the web preview resolves images by layer name, but iOS requires explicit
+    bindings or the layer renders empty. Returns the number of layers fixed.
+    """
+    main_caml = os.path.join(plane_dir, "main.caml")
+    assets_dir = os.path.join(plane_dir, "assets")
+    if not os.path.isfile(main_caml) or not os.path.isdir(assets_dir):
+        return 0
+    assets = {
+        name for name in os.listdir(assets_dir)
+        if name.lower().endswith(_IMAGE_EXTENSIONS)
+        and os.path.isfile(os.path.join(assets_dir, name))
+    }
+    if not assets:
+        return 0
+    text = _read_text(main_caml)
+    layer_re = re.compile(r'<CALayer\b[^>]*\bname="([^"]+)"[^>]*>', re.DOTALL)
+    matches = list(layer_re.finditer(text))
+    if not matches:
+        return 0
+
+    parts = []
+    last_pos = 0
+    fixed = 0
+    for match in matches:
+        tag = match.group(0)
+        name = match.group(1)
+        if tag.endswith("/>"):
+            continue
+        tag_end = match.end()
+        window = text[tag_end:tag_end + 5000]
+        p_contents = window.find("<contents")
+        p_open = window.find("<CALayer")
+        p_close = window.find("</CALayer>")
+        has_contents = (
+            p_contents >= 0
+            and (p_open < 0 or p_contents < p_open)
+            and (p_close < 0 or p_contents < p_close)
+        )
+        if has_contents:
+            continue
+        asset = _infer_asset_for_layer(name, assets)
+        if not asset:
+            continue
+        parts.append(text[last_pos:tag_end])
+        parts.append(
+            f'\n            <contents>\n'
+            f'              <CGImage src="assets/{_xml_attr(asset)}"/>\n'
+            f'            </contents>'
+        )
+        last_pos = tag_end
+        fixed += 1
+    if fixed == 0:
+        return 0
+    parts.append(text[last_pos:])
+    _write_text(main_caml, "".join(parts))
+    return fixed
+
+
 def ensure_background_image(plane_dir: str, role: str,
                             doc_width: float, doc_height: float) -> "str | None":
     """Render a color-only plane's fill to a PNG and publish it as its image.
@@ -743,6 +820,9 @@ def modernize_plane(plane_dir: str, role: str, doc_width: float, doc_height: flo
         text = modernize_main_caml(
             text, role, doc_width, doc_height, units_in_pixels, pixel_scale)
     _write_text(main_caml, text)
+    # Fix layers that have a name but no <contents> binding (CAPlayground
+    # web preview resolves by name; iOS requires explicit bindings).
+    ensure_layer_contents(plane_dir)
     # A color-only plane carries no image and traps the depth renderer; give it
     # a real CGImage rendered from its fill before it is published.
     ensure_background_image(plane_dir, role, doc_width, doc_height)
