@@ -29,10 +29,6 @@
 - 输出后缀、输出目录可在界面选项区修改（默认输出为 `原名.clownfish.tendies`）
 - 多线程转换，进度条与时间戳日志实时显示
 
-### 不做的事
-- 无预览功能：转换前建议先用 CAPlayground 网页版确认效果
-- 不自动合成 Floating 平面，不强制居中偏出屏幕的图层，不补全缺失的 Locked / Unlock / Sleep 状态定义
-
 ## 使用
 
 1. 双击运行 `TendiesPy.exe`（免安装，单文件；或安装 Python 3 后运行 `python gui.py`）
@@ -60,6 +56,7 @@ pyinstaller --onefile --windowed --name TendiesPy gui.py
 
 ## 相关项目
 
+- [goldennugget-team/goldennugget](https://github.com/goldennugget-team/goldennugget) — GoldenNugget，本工具转换核心的来源
 - [CAPlayground/CAPlayground](https://github.com/CAPlayground/CAPlayground) — 网页版 Core Animation 壁纸编辑器，可对壁纸做完整交互式预览与精细编辑。建议配合使用：TendiesPy 负责批量转换，CAPlayground 负责完整预览与精调。
 
 ## 免责
