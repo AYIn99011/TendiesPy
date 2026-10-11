@@ -349,21 +349,24 @@ def _rgb_from_components(value: str) -> "tuple[int, int, int] | None":
 
 
 def _solid_background_color(text: str) -> "tuple[int, int, int] | None":
-    """The first opaque solid color in a plane's CAML, if any.
+    """The topmost opaque solid color in a plane's CAML, if any.
 
     A sublayer's ``backgroundColor`` attribute (the visible fill) wins over the
     root's ``<backgroundColor>`` element, which the source often leaves at
-    opacity 0.
+    opacity 0. Later matches are visually on top, so the last one wins.
     """
+    last = None
     for match in re.finditer(r'backgroundColor="([^"]+)"', text):
         rgb = _rgb_from_components(match.group(1))
         if rgb:
-            return rgb
+            last = rgb
+    if last:
+        return last
     for match in re.finditer(r'<backgroundColor\b[^>]*\bvalue="([^"]+)"', text):
         rgb = _rgb_from_components(match.group(1))
         if rgb:
-            return rgb
-    return None
+            last = rgb
+    return last
 
 
 _SELF_CLOSING_LAYER_RE = re.compile(r"<CALayer\b[^>]*/>")
