@@ -62,3 +62,7 @@ pyinstaller --onefile --windowed --name TendiesPy gui.py
 ## 免责
 
 - 非官方逆向格式工具，使用前请自行备份源文件。
+
+## 开源协议
+
+- 本项目采用 [AGPL-3.0](LICENSE) 开源协议（转换核心基于 GoldenNugget 的 AGPL-3.0 代码改写）。
