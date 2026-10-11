@@ -56,6 +56,7 @@ pyinstaller --onefile --windowed --name TendiesPy gui.py
 
 ## 相关项目
 
+- [goldennugget-team/goldennugget](https://github.com/goldennugget-team/goldennugget) — GoldenNugget，本工具转换核心的来源
 - [CAPlayground/CAPlayground](https://github.com/CAPlayground/CAPlayground) — 网页版 Core Animation 壁纸编辑器，可对壁纸做完整交互式预览与精细编辑。建议配合使用：TendiesPy 负责批量转换，CAPlayground 负责完整预览与精调。
 
 ## 免责
