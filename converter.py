@@ -298,6 +298,56 @@ def plane_has_external_script(plane_dir: str) -> bool:
     return _has_external_script(_read_text(main_caml))
 
 
+def _detect_image_ext(path: str) -> "str | None":
+    """Detect image format by magic numbers, returning the correct extension."""
+    try:
+        with open(path, "rb") as f:
+            magic = f.read(12)
+    except OSError:
+        return None
+    if (len(magic) >= 8 and magic[:8] == b"\x89PNG\r\n\x1a\n"):
+        return ".png"
+    if len(magic) >= 2 and magic[:2] == b"\xff\xd8":
+        return ".jpg"
+    if len(magic) >= 12 and magic[4:8] == b"ftyp":
+        brand = magic[8:12].decode("ascii", errors="ignore")
+        if brand in ("heic", "heix", "hevc", "hevx"):
+            return ".heic"
+        if brand in ("mif1", "msf1"):
+            return ".heif"
+    return None
+
+
+def fix_asset_extensions(plane_dir: str) -> "dict[str, str]":
+    """Rename assets whose extension doesn't match their real format.
+
+    iOS picks the decoder by file extension; a PNG named ``.jpg`` spins
+    forever. Returns ``{old_name: new_name}`` for CAML reference updates.
+    """
+    renamed = {}
+    assets_dir = os.path.join(plane_dir, "assets")
+    if not os.path.isdir(assets_dir):
+        return renamed
+    for name in sorted(os.listdir(assets_dir)):
+        path = os.path.join(assets_dir, name)
+        if not os.path.isfile(path):
+            continue
+        actual_ext = _detect_image_ext(path)
+        if actual_ext is None:
+            continue
+        curr_ext = os.path.splitext(name)[1].lower()
+        if curr_ext == ".jpeg":
+            curr_ext = ".jpg"
+        if curr_ext == actual_ext:
+            continue
+        new_name = os.path.splitext(name)[0] + actual_ext
+        if os.path.exists(os.path.join(assets_dir, new_name)):
+            continue  # don't overwrite
+        os.rename(path, os.path.join(assets_dir, new_name))
+        renamed[name] = new_name
+    return renamed
+
+
 def _xml_attr(value: str) -> str:
     return (value.replace("&", "&amp;").replace('"', "&quot;")
             .replace("<", "&lt;").replace(">", "&gt;"))
@@ -814,7 +864,12 @@ def modernize_plane(plane_dir: str, role: str, doc_width: float, doc_height: flo
     main_caml = os.path.join(plane_dir, "main.caml")
     if not os.path.isfile(main_caml):
         raise ConversionError(f"{plane_dir} has no main.caml")
+    # Fix file extensions first (iOS picks decoder by extension).
+    renamed_assets = fix_asset_extensions(plane_dir)
     text = strip_scripts(_read_text(main_caml))
+    for old_name, new_name in renamed_assets.items():
+        text = text.replace(f'assets/{old_name}"', f'assets/{new_name}"')
+        text = text.replace(f"assets/{old_name}'", f"assets/{new_name}'")
     if _has_unsupported_caml(text):
         # Publishing the root would keep the trapping state op and crash the
         # depth renderer for every wallpaper; flatten to a static frame instead.

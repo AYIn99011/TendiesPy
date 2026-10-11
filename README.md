@@ -19,6 +19,7 @@
 - 前景补齐：缺失 Foreground 平面时合成透明 Foreground
 - 图层绑定修复：图层有名字但缺 `<contents>` 绑定时，按图层名在资源目录中匹配图片并补上绑定（网页预览按名字找图能显示，iOS 必须显式绑定）
 - 纯色背景取色：多层纯色叠加时取视觉最上层的颜色渲染为背景图，而非最底层的
+- 资源修复：按文件魔数纠正扩展名（如内容为 PNG 但后缀为 `.jpg` 的资源，iOS 按扩展名选解码器，错了会一直转圈）
 - 画布规范：平面文档为逻辑屏幕尺寸，`_fit_scale` 带 5% 容差
 - 命名规范：按 Clownfish skeleton 规范重命名描述符与平面目录
 - 打包清理：跳过 `__MACOSX` 等 macOS 打包垃圾目录
@@ -37,6 +38,25 @@
 1. 双击运行 `TendiesPy.exe`（免安装，单文件；或安装 Python 3 后运行 `python gui.py`）
 2. 添加 `.tendies` 文件 → 开始转换
 3. 输出为 `原名.clownfish.tendies`，用 GoldenNugget 刷入
+
+## 打包与运行方式
+
+### 直接运行（需 Python 3）
+```bash
+# 前置要求：Python 3（自带 tkinter）
+# 转换功能仅需标准库；无需安装任何依赖
+python gui.py
+```
+
+### 打包为单文件 exe（Windows）
+```bash
+# 前置要求：Python 3 + PyInstaller
+pip install pyinstaller
+pyinstaller --onefile --windowed --name TendiesPy gui.py
+# 输出：dist/TendiesPy.exe（约 18MB，含 Python + tkinter，开箱即用）
+```
+
+本仓库的 exe 由 GitHub Actions 自动构建：每次 push 到 main 分支，`.github/workflows/build-windows.yml` 会在 Windows runner 上打包并上传 artifact。
 
 ## 相关项目
 
